@@ -6,9 +6,9 @@
  */
 
 #include "cmd_admin.h"
+#include "db.h"
 #include "pstd/env.h"
 #include "store.h"
-#include "db.h"
 
 namespace pikiwidb {
 
@@ -44,7 +44,8 @@ void CmdConfigSet::DoCmd(PClient* client) {
 }
 
 FlushdbCmd::FlushdbCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsExclusive | kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryAdmin) {}
+    : BaseCmd(name, arity, kCmdFlagsExclusive | kCmdFlagsAdmin | kCmdFlagsWrite,
+              kAclCategoryWrite | kAclCategoryAdmin) {}
 
 bool FlushdbCmd::DoInitial(PClient* client) { return true; }
 
@@ -73,7 +74,8 @@ void FlushdbCmd::DoCmd(PClient* client) {
 }
 
 FlushallCmd::FlushallCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsExclusive | kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryAdmin) {}
+    : BaseCmd(name, arity, kCmdFlagsExclusive | kCmdFlagsAdmin | kCmdFlagsWrite,
+              kAclCategoryWrite | kAclCategoryAdmin) {}
 
 bool FlushallCmd::DoInitial(PClient* client) { return true; }
 
