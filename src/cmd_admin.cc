@@ -6,8 +6,8 @@
  */
 
 #include "cmd_admin.h"
-#include "pikiwidb.h"
 #include "db.h"
+#include "pikiwidb.h"
 #include "pstd/env.h"
 #include "store.h"
 
@@ -64,7 +64,7 @@ void FlushdbCmd::DoCmd(PClient* client) {
   storage::StorageOptions storage_options;
   storage_options.options = g_config.GetRocksDBOptions();
   auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
-            storage_options.options.max_write_buffer_number;
+             storage_options.options.max_write_buffer_number;
   storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
 
   storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
@@ -101,7 +101,7 @@ void FlushallCmd::DoCmd(PClient* client) {
     storage::StorageOptions storage_options;
     storage_options.options = g_config.GetRocksDBOptions();
     auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
-              storage_options.options.max_write_buffer_number;
+               storage_options.options.max_write_buffer_number;
     storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
 
     storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
@@ -109,7 +109,7 @@ void FlushallCmd::DoCmd(PClient* client) {
     storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
     storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
     storage_options.db_instance_num = g_config.db_instance_num;
-    storage_options.db_id = static_cast<int>(i);  
+    storage_options.db_id = static_cast<int>(i);
 
     storage::Status s = PSTORE.GetBackend(i)->GetStorage()->Open(storage_options, db_path.data());
     assert(s.ok());
