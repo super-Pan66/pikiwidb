@@ -6,6 +6,7 @@
  */
 
 #include "cmd_admin.h"
+#include "pikiwidb.h"
 #include "db.h"
 #include "pstd/env.h"
 #include "store.h"
@@ -54,17 +55,24 @@ void FlushdbCmd::DoCmd(PClient* client) {
   PSTORE.GetBackend(currentDBIndex).get()->Lock();
   PSTORE.GetBackend(currentDBIndex)->GetStorage().reset();
 
-  std::string db_path = g_config.dbpath + std::to_string(currentDBIndex);
+  std::string db_path = g_config.db_path.ToString() + std::to_string(currentDBIndex);
   std::string path_temp = db_path;
   path_temp.append("_deleting/");
   pstd::RenameFile(db_path, path_temp);
 
   PSTORE.GetBackend(currentDBIndex)->GetStorage() = std::make_unique<storage::Storage>();
   storage::StorageOptions storage_options;
-  storage_options.options.create_if_missing = true;
+  storage_options.options = g_config.GetRocksDBOptions();
+  auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
+            storage_options.options.max_write_buffer_number;
+  storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
+
+  storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
+
+  storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
+  storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
   storage_options.db_instance_num = g_config.db_instance_num;
-  storage_options.options.ttl = g_config.rocksdb_ttl_second;
-  storage_options.options.periodic_compaction_seconds = g_config.rocksdb_periodic_second;
+  storage_options.db_id = currentDBIndex;
 
   storage::Status s = PSTORE.GetBackend(currentDBIndex)->GetStorage()->Open(storage_options, db_path.data());
   assert(s.ok());
@@ -84,17 +92,24 @@ void FlushallCmd::DoCmd(PClient* client) {
     PSTORE.GetBackend(i).get()->Lock();
     PSTORE.GetBackend(i)->GetStorage().reset();
 
-    std::string db_path = g_config.dbpath + std::to_string(i);
+    std::string db_path = g_config.db_path.ToString() + std::to_string(i);
     std::string path_temp = db_path;
     path_temp.append("_deleting/");
     pstd::RenameFile(db_path, path_temp);
 
     PSTORE.GetBackend(i)->GetStorage() = std::make_unique<storage::Storage>();
     storage::StorageOptions storage_options;
-    storage_options.options.create_if_missing = true;
+    storage_options.options = g_config.GetRocksDBOptions();
+    auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
+              storage_options.options.max_write_buffer_number;
+    storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
+
+    storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
+
+    storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
+    storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
     storage_options.db_instance_num = g_config.db_instance_num;
-    storage_options.options.ttl = g_config.rocksdb_ttl_second;
-    storage_options.options.periodic_compaction_seconds = g_config.rocksdb_periodic_second;
+    storage_options.db_id = static_cast<int>(i);  
 
     storage::Status s = PSTORE.GetBackend(i)->GetStorage()->Open(storage_options, db_path.data());
     assert(s.ok());
