@@ -259,4 +259,3 @@ void InfoCmd::InfoData(PClient* client) {
 }
 
 }  // namespace pikiwidb
-
