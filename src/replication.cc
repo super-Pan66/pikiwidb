@@ -192,12 +192,18 @@ void PReplication::Cron() {
             g_pikiwidb->OnNewConnection(obj);
           }
         };
+
         auto fail_cb = [&](EventLoop*, const char* peer_ip, int port) {
           WARN("OnCallback: Connect master {}:{} failed", peer_ip, port);
 
           PREPL.SetMasterState(kPReplStateNone);
           if (!masterInfo_.downSince) {
             masterInfo_.downSince = ::time(nullptr);
+          }
+
+          if (on_fail_) {
+            on_fail_(EventLoop::Self(), peer_ip, port);
+            on_fail_ = nullptr;
           }
         };
 
@@ -208,20 +214,7 @@ void PReplication::Cron() {
       } break;
 
       case kPReplStateConnected:
-        if (!g_config.master_auth.empty()) {
-          if (auto master = master_.lock()) {
-            UnboundedBuffer req;
-            req.PushData("auth ");
-            req.PushData(g_config.master_auth.ToString().data(), g_config.master_auth.ToString().size());
-            req.PushData("\r\n");
-            master->SendPacket(req);
-            INFO("send auth with password {}", g_config.master_auth.ToString());
-
-            masterInfo_.state = kPReplStateWaitAuth;
-            break;
-          }
-        }
-        // fall through to next case.
+        break;
 
       case kPReplStateWaitAuth: {
         auto master = master_.lock();

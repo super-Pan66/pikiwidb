@@ -5,7 +5,6 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#include <iostream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -106,6 +105,7 @@ PConfig::PConfig() {
   AddBool("daemonize", &CheckYesNo, false, &daemonize);
   AddString("ip", false, {&ip});
   AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+  AddNumber("raft-port-offset", true, &raft_port_offset);
   AddNumber("timeout", true, &timeout);
   AddString("db-path", false, {&db_path});
   AddStrinWithFunc("loglevel", &CheckLogLevel, false, {&log_level});
@@ -124,6 +124,7 @@ PConfig::PConfig() {
   AddString("runid", false, {&run_id});
   AddNumber("small-compaction-threshold", true, &small_compaction_threshold);
   AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold);
+  AddBool("use-raft", &CheckYesNo, false, &use_raft);
 
   // rocksdb config
   AddNumber("rocksdb-max-subcompactions", false, &rocksdb_max_subcompactions);

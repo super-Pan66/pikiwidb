@@ -9,6 +9,7 @@
 
 #include <cassert>
 #include <functional>
+#include <map>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -27,6 +28,7 @@ namespace pikiwidb {
 using Status = rocksdb::Status;
 using CheckFunc = std::function<Status(const std::string&)>;
 class PConfig;
+
 extern PConfig g_config;
 
 class BaseValue {
@@ -144,6 +146,7 @@ class PConfig {
   AtomicString pid_file = "./pikiwidb.pid";
   AtomicString ip = "127.0.0.1";
   std::atomic_uint16_t port = 9221;
+  std::atomic_uint16_t raft_port_offset = 10;
   AtomicString db_path = "./db/";
   AtomicString log_dir = "stdout";  // the log directory, differ from redis
   AtomicString log_level = "warning";
@@ -152,6 +155,7 @@ class PConfig {
   std::atomic_uint32_t worker_threads_num = 2;
   std::atomic_uint32_t slave_threads_num = 2;
   std::atomic<size_t> db_instance_num = 3;
+  std::atomic_bool use_raft = true;
 
   std::atomic_uint32_t rocksdb_max_subcompactions = 0;
   // default 2
@@ -167,6 +171,8 @@ class PConfig {
   std::atomic_bool rocksdb_enable_pipelined_write = false;
   std::atomic_int rocksdb_level0_slowdown_writes_trigger = 20;
   std::atomic_int rocksdb_level0_stop_writes_trigger = 36;
+  std::atomic_uint64_t rocksdb_ttl_second = 604800;       // default 86400 * 7
+  std::atomic_uint64_t rocksdb_periodic_second = 259200;  // default 86400 * 3
 
   rocksdb::Options GetRocksDBOptions();
 

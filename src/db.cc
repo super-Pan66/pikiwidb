@@ -6,33 +6,105 @@
  */
 
 #include "db.h"
+
 #include "config.h"
+#include "praft/praft.h"
+#include "pstd/log.h"
 
 extern pikiwidb::PConfig g_config;
 
 namespace pikiwidb {
 
-DB::DB(int db_id, const std::string &db_path) : db_id_(db_id), db_path_(db_path + std::to_string(db_id) + '/') {
+DB::DB(int db_index, const std::string& db_path)
+    : db_index_(db_index), db_path_(db_path + std::to_string(db_index_) + '/') {
   storage::StorageOptions storage_options;
   storage_options.options = g_config.GetRocksDBOptions();
-  // some options obj for all RocksDB in one DB.
-  auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
-             storage_options.options.max_write_buffer_number;
-  storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
+  storage_options.db_instance_num = g_config.db_instance_num.load();
+  storage_options.db_id = db_index_;
 
-  storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
-
-  storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
-  storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
-  storage_options.db_instance_num = g_config.db_instance_num;
-  storage_options.db_id = db_id;
-
+  // options for CF
+  storage_options.options.ttl = g_config.rocksdb_ttl_second.load(std::memory_order_relaxed);
+  storage_options.options.periodic_compaction_seconds =
+      g_config.rocksdb_periodic_second.load(std::memory_order_relaxed);
+  if (g_config.use_raft.load(std::memory_order_relaxed)) {
+    storage_options.append_log_function = [&r = PRAFT](const Binlog& log, std::promise<rocksdb::Status>&& promise) {
+      r.AppendLog(log, std::move(promise));
+    };
+    storage_options.do_snapshot_function =
+        std::bind(&pikiwidb::PRaft::DoSnapshot, &pikiwidb::PRAFT, std::placeholders::_1, std::placeholders::_2);
+  }
   storage_ = std::make_unique<storage::Storage>();
+
   if (auto s = storage_->Open(storage_options, db_path_); !s.ok()) {
     ERROR("Storage open failed! {}", s.ToString());
     abort();
   }
+
   opened_ = true;
+  INFO("Open DB{} success!", db_index_);
 }
 
+void DB::CreateCheckpoint(const std::string& checkpoint_path, bool sync) {
+  auto checkpoint_sub_path = checkpoint_path + '/' + std::to_string(db_index_);
+  if (0 != pstd::CreatePath(checkpoint_sub_path)) {
+    WARN("Create dir {} fail !", checkpoint_sub_path);
+    return;
+  }
+
+  std::shared_lock sharedLock(storage_mutex_);
+  auto result = storage_->CreateCheckpoint(checkpoint_sub_path);
+  if (sync) {
+    for (auto& r : result) {
+      r.get();
+    }
+  }
+}
+
+void DB::LoadDBFromCheckpoint(const std::string& checkpoint_path, bool sync [[maybe_unused]]) {
+  auto checkpoint_sub_path = checkpoint_path + '/' + std::to_string(db_index_);
+  if (0 != pstd::IsDir(checkpoint_sub_path)) {
+    WARN("Checkpoint dir {} does not exist!", checkpoint_sub_path);
+    return;
+  }
+  if (0 != pstd::IsDir(db_path_)) {
+    if (0 != pstd::CreateDir(db_path_)) {
+      WARN("Create dir {} fail !", db_path_);
+      return;
+    }
+  }
+
+  std::lock_guard<std::shared_mutex> lock(storage_mutex_);
+  opened_ = false;
+  auto result = storage_->LoadCheckpoint(checkpoint_sub_path, db_path_);
+
+  for (auto& r : result) {
+    r.get();
+  }
+
+  storage::StorageOptions storage_options;
+  storage_options.options = g_config.GetRocksDBOptions();
+  storage_options.db_instance_num = g_config.db_instance_num.load();
+  storage_options.db_id = db_index_;
+
+  // options for CF
+  storage_options.options.ttl = g_config.rocksdb_ttl_second.load(std::memory_order_relaxed);
+  storage_options.options.periodic_compaction_seconds =
+      g_config.rocksdb_periodic_second.load(std::memory_order_relaxed);
+  if (g_config.use_raft.load(std::memory_order_relaxed)) {
+    storage_options.append_log_function = [&r = PRAFT](const Binlog& log, std::promise<rocksdb::Status>&& promise) {
+      r.AppendLog(log, std::move(promise));
+    };
+    storage_options.do_snapshot_function =
+        std::bind(&pikiwidb::PRaft::DoSnapshot, &pikiwidb::PRAFT, std::placeholders::_1, std::placeholders::_2);
+  }
+  storage_ = std::make_unique<storage::Storage>();
+
+  if (auto s = storage_->Open(storage_options, db_path_); !s.ok()) {
+    ERROR("Storage open failed! {}", s.ToString());
+    abort();
+  }
+
+  opened_ = true;
+  INFO("DB{} load a checkpoint from {} success!", db_index_, checkpoint_path);
+}
 }  // namespace pikiwidb
